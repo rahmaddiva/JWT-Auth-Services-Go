@@ -8,23 +8,28 @@ import (
 )
 
 type JWTService struct {
-	secretKey    string
-	issuer       string
+	secretKey     string
+	issuer        string
 	accessExpiry  time.Duration
 	refreshExpiry time.Duration
 }
 
+func (s *JWTService) AccessExpiry() time.Duration {
+	return s.accessExpiry
+}
+
+
 type JwtClaims struct {
-	UserID  string `json:"user_id"`
+	UserID   string `json:"user_id"`
 	Username string `json:"username"`
-	Role    string `json:"role"`
+	Role     string `json:"role"`
 	jwt.RegisteredClaims
 }
 
 func NewJWTService(secretKey, issuer string, accessExpMin, refreshExpDays int) *JWTService {
 	return &JWTService{
-		secretKey:    secretKey,
-		issuer:       issuer,
+		secretKey:     secretKey,
+		issuer:        issuer,
 		accessExpiry:  time.Duration(accessExpMin) * time.Minute,
 		refreshExpiry: time.Duration(refreshExpDays) * 24 * time.Hour,
 	}
@@ -33,14 +38,14 @@ func NewJWTService(secretKey, issuer string, accessExpMin, refreshExpDays int) *
 func (s *JWTService) GenerateAccessToken(userID, username, role string) (string, error) {
 	now := time.Now()
 	claims := &JwtClaims{
-		UserID:  userID,
+		UserID:   userID,
 		Username: username,
-		Role:    role,
+		Role:     role,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    s.issuer,
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(s.accessExpiry)),
-			Subject: userID,
+			Subject:   userID,
 		},
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -53,7 +58,7 @@ func (s *JWTService) GenerateRefreshToken(userID, username, role string) (string
 		Issuer:    s.issuer,
 		IssuedAt:  jwt.NewNumericDate(now),
 		ExpiresAt: jwt.NewNumericDate(now.Add(s.refreshExpiry)),
-		Subject: userID,
+		Subject:   userID,
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(s.secretKey))

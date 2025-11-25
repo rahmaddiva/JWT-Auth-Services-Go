@@ -1,15 +1,14 @@
 package handlers
 
 import (
-    "net/http"
-    "time"
+	"jwt_auth_service_go/models"
+	"jwt_auth_service_go/services"
+	"net/http"
+	"time"
 
-    "github.com/gin-gonic/gin"
-    "github.com/google/uuid"
-    "golang.org/x/crypto/bcrypt"
-
-    "github.com/yourusername/jwt_auth_service/models"
-    "github.com/yourusername/jwt_auth_service/services"
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // simple in-memory store (replace with DB pada produksi)
@@ -84,7 +83,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
         c.JSON(http.StatusInternalServerError, gin.H{"error": "could not generate token"})
         return
     }
-    refresh, err := h.jwtSvc.GenerateRefreshToken(usr.ID)
+    refresh, err := h.jwtSvc.GenerateRefreshToken(usr.ID, usr.Username, usr.Role)
     if err != nil {
         c.JSON(http.StatusInternalServerError, gin.H{"error": "could not generate refresh token"})
         return
@@ -97,7 +96,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
         "access_token":  access,
         "refresh_token": refresh,
         "token_type":    "bearer",
-        "expires_in":    int(h.jwtSvc.AccessExpiry().Minutes()), // helper below
+        "expires_in":    int(h.jwtSvc.AccessExpiry().Seconds()), // use seconds for expires_in
     })
 }
 
@@ -121,24 +120,36 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
         return
     }
 
-    // create new access (and optionally new refresh)
+    // create new access and new refresh token, invalidate old refresh
     access, err := h.jwtSvc.GenerateAccessToken(claims.UserID, claims.Username, claims.Role)
     if err != nil {
         c.JSON(http.StatusInternalServerError, gin.H{"error": "could not generate access token"})
         return
     }
+    newRefresh, err := h.jwtSvc.GenerateRefreshToken(claims.UserID, claims.Username, claims.Role)
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "could not generate new refresh token"})
+        return
+    }
+    // remove old refresh token, store new one
+    delete(refreshStore, payload.RefreshToken)
+    refreshStore[newRefresh] = claims.UserID
     c.JSON(http.StatusOK, gin.H{
-        "access_token": access,
-        "token_type":   "bearer",
-        "expires_in":   int(h.jwtSvc.AccessExpiry().Minutes()),
+        "access_token":  access,
+        "refresh_token": newRefresh,
+        "token_type":    "bearer",
+        "expires_in":    int(h.jwtSvc.AccessExpiry().Seconds()),
     })
 }
 
 func (h *AuthHandler) Protected(c *gin.Context) {
     // ambil claims dari context
-    raw, _ := c.Get("claims")
-    claims := raw.(*services.JWTClaims)
-
+    raw, exists := c.Get("claims")
+    claims, ok := raw.(*services.JwtClaims)
+    if !exists || !ok {
+        c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid or missing claims"})
+        return
+    }
     c.JSON(http.StatusOK, gin.H{
         "message":  "protected data",
         "user_id":  claims.UserID,

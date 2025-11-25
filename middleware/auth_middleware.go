@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/rahmaddiva/JWT-Auth-Services-Go/services"
+	"jwt_auth_service_go/services"
 )
 
 
